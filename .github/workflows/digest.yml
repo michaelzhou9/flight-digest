@@ -1,0 +1,45 @@
+name: Flight deal digest
+
+on:
+  schedule:
+    # 12:00 UTC = 8am Eastern in summer, 7am in winter.
+    - cron: "0 12 * * *"
+  workflow_dispatch:   # lets you press a button to run it right now
+
+permissions:
+  contents: write      # to save seen.json back to the repo
+  issues: write        # to open the digest issue
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install feedparser
+        run: pip install feedparser
+
+      - name: Build the digest
+        run: python digest.py
+
+      - name: Open an issue if there is anything new
+        if: hashFiles('digest.md') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Flight deals - $(date -u +'%b %d, %Y')" \
+            --body-file digest.md \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Remember what we've already seen
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add seen.json
+          git diff --staged --quiet || git commit -m "Update seen posts"
+          git push
